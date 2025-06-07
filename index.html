@@ -3,67 +3,82 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Keller Lüften Checker</title>
+<title>Lüften Check</title>
 <style>
-  body { font-family: Arial, sans-serif; margin: 2em; max-width: 400px; }
+  body { font-family: Arial, sans-serif; margin: 1em; max-width: 400px; }
   label { display: block; margin-top: 1em; }
-  input[type=number] { width: 100%; padding: 0.5em; font-size: 1em; }
-  button { margin-top: 1.5em; padding: 0.7em; font-size: 1em; width: 100%; cursor: pointer; }
-  .result { margin-top: 1.5em; font-weight: bold; font-size: 1.2em; white-space: pre-wrap; }
+  input[type=number] { width:100%; padding:0.5em;font-size:1em }
+  button { margin-top:1.5em;padding:0.7em;font-size:1em;width:100%;cursor:pointer }
+  .result, .weather { margin-top:1em; font-weight:bold; white-space:pre-wrap; }
 </style>
 </head>
 <body>
-<h1>Keller Lüften Checker</h1>
+<h1>Lüften Check Süpplingenburg Wetter</h1>
 
-<label for="tempKeller">Keller Temperatur (°C):</label>
-<input type="number" id="tempKeller" step="0.1" value="18" />
+<label>Temperatur (°C):</label>
+<input type="number" id="tempKeller" step="0.1" value="18"/>
+<label>Luftfeuchtigkeit (%):</label>
+<input type="number" id="rhKeller" step="0.1" value="60"/>
 
-<label for="rhKeller">Keller Luftfeuchtigkeit (%):</label>
-<input type="number" id="rhKeller" step="0.1" value="60" />
+<label>Außen Temperatur (°C):</label>
+<input type="number" id="tempAussen" step="0.1" value="10"/>
+<label>Außen Luftfeuchtigkeit (%):</label>
+<input type="number" id="rhAussen" step="0.1" value="70"/>
 
-<label for="tempAussen">Außen Temperatur (°C):</label>
-<input type="number" id="tempAussen" step="0.1" value="10" />
-
-<label for="rhAussen">Außen Luftfeuchtigkeit (%):</label>
-<input type="number" id="rhAussen" step="0.1" value="70" />
-
-<button onclick="checkLueften()">Lüftung prüfen</button>
+<button onclick="checkLueften()">Lüftung prüfen + Wetter laden</button>
 
 <div class="result" id="result"></div>
+<div class="weather" id="weather">Wetter wird geladen…</div>
 
 <script>
 function calcAbsoluteHumidity(T, RH) {
-  // T in °C, RH in %
-  // Formel der absoluten Feuchte in g/m³
-  const Es = 6.112 * Math.exp((17.67 * T) / (T + 243.5));
-  const AH = (Es * RH * 2.1674) / (273.15 + T);
-  return AH;
+  const es = 6.112 * Math.exp((17.67 * T) / (T + 243.5));
+  const ah = (es * RH * 2.1674) / (273.15 + T);
+  return ah;
 }
 
 function checkLueften() {
-  const tempK = parseFloat(document.getElementById("tempKeller").value);
-  const rhK = parseFloat(document.getElementById("rhKeller").value) / 100;
-  const tempA = parseFloat(document.getElementById("tempAussen").value);
-  const rhA = parseFloat(document.getElementById("rhAussen").value) / 100;
+  const tK = parseFloat(document.getElementById("tempKeller").value);
+  const rK = parseFloat(document.getElementById("rhKeller").value) / 100;
+  const tA = parseFloat(document.getElementById("tempAussen").value);
+  const rA = parseFloat(document.getElementById("rhAussen").value) / 100;
 
-  if (isNaN(tempK) || isNaN(rhK) || isNaN(tempA) || isNaN(rhA)) {
-    document.getElementById("result").innerText = "Bitte alle Werte korrekt eingeben.";
-    return;
+  if ([tK, rK, tA, rA].some(isNaN)) {
+    return document.getElementById("result").innerText = "Bitte alle Werte korrekt eingeben.";
   }
 
-  const ahKeller = calcAbsoluteHumidity(tempK, rhK);
-  const ahAussen = calcAbsoluteHumidity(tempA, rhA);
+  const ahK = calcAbsoluteHumidity(tK, rK);
+  const ahA = calcAbsoluteHumidity(tA, rA);
 
-  let message = `Keller absolute Feuchte: ${ahKeller.toFixed(2)} g/m³\nAußen absolute Feuchte: ${ahAussen.toFixed(2)} g/m³\n\n`;
+  let msg = `Keller AH: ${ahK.toFixed(4)} g/m³\nAußen AH: ${ahA.toFixed(4)} g/m³\n\n`;
+  msg += ahA < ahK
+    ? "✅ Lüften möglich – Außenluft ist trockener."
+    : "⛔ Nicht lüften – Außenluft ist feuchter.";
+  document.getElementById("result").innerText = msg;
 
-  if (ahAussen < ahKeller) {
-    message += "✅ Lüften möglich – Außenluft ist trockener.";
-  } else {
-    message += "⛔ Nicht lüften – Außenluft ist feuchter.";
-  }
+  fetchWeather();
+}
 
-  document.getElementById("result").innerText = message;
+function fetchWeather() {
+  const lat = 52.219; // Süpplingenburg (ca.)
+  const lon = 10.933;
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`;
+
+  fetch(url)
+    .then(res => res.json())
+    .then(data => {
+      const c = data.current_weather;
+      document.getElementById("weather").innerText =
+        `🌤 Süpplingenburg jetzt:\n` +
+        `Temp: ${c.temperature.toFixed(1)} °C, Wind: ${c.windspeed.toFixed(1)} m/s, Richtung: ${c.winddirection}°\n` +
+        `Zeit: ${new Date(c.time).toLocaleTimeString()}`;
+    })
+    .catch(err => {
+      document.getElementById("weather").innerText = "⚠ Wetterdaten konnten nicht geladen werden.";
+      console.error(err);
+    });
 }
 </script>
 </body>
+</html>
 </html>
